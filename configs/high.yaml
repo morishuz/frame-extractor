@@ -1,0 +1,3 @@
+# Setting to produce a high density of keyframes
+min_survival_percent: 50.0
+t_motion: 0.01

@@ -1,0 +1,67 @@
+# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python packaging/build
+.Python
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test, lint, and type-check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code (optional local settings)
+.vscode/
+
+# Common computer-vision run artifacts
+outputs/
+runs/
+artifacts/
+checkpoints/
+out/
+
+# Evaluation artifacts (COLMAP workspaces, SQLite DBs, generated report)
+evaluation/workspace/
+evaluation/workspace_runs/
+evaluation/evaluation_results/
+evaluation/evaluation.md
+evaluation/**/*.db
+evaluation/**/*.db-shm
+evaluation/**/*.db-wal

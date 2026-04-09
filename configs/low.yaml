@@ -1,0 +1,2 @@
+# Setting to produce a low number of keyframes
+t_motion: 0.02

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frame-extractor"
+version = "0.1.0"
+description = "CLI for extracting SfM-friendly keyframes from video with feature tracking"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "opencv-python>=4.8",
+  "pyyaml>=6.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+frame-extractor = "cli:main"
+
+[tool.setuptools]
+py-modules = [
+  "cli",
+  "config",
+  "features",
+  "metrics",
+  "optical_flow",
+  "pipeline",
+  "tracker",
+  "visualization",
+]

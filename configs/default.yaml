@@ -1,0 +1,24 @@
+# Tracking and reset configuration
+min_survival_percent: 30.0
+motion_percentile: 50.0
+t_motion: 0.015
+max_frames_since_keyframe: 1000
+n_downsample: 2
+keyframe_image_format: jpg
+
+gftt:
+  features_per_mp: 800
+  min_features: 600
+  max_features: 4000
+  quality_level: 0.01
+  min_distance_frac: 0.001
+  block_size: 3
+  use_harris_detector: false
+  k: 0.04
+
+lk:
+  win_size: [21, 21]
+  max_level: 3
+  use_reverse_tracking_check: true
+  fb_thresh_frac: 0.001
+  min_eig_threshold: 0.0001
