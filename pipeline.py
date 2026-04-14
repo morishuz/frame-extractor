@@ -11,7 +11,17 @@ from tqdm.auto import tqdm
 
 from metrics import KeyframeDecider, KeyframeDecision
 from tracker import LKTracker
-from visualization import draw_tracks
+from visualization import (
+    append_thumbnail_strip,
+    draw_tracks,
+    make_keyframe_thumbnail,
+    resize_to_width,
+    thumbnail_size_for_frame,
+    thumbnail_strip_size,
+)
+
+
+MAX_DEBUG_THUMBNAILS = 10
 
 
 @dataclass
@@ -52,6 +62,10 @@ def _create_video_writer(path: str, fps: float, width: int, height: int) -> cv2.
     if not writer.isOpened():
         raise IOError(f"Cannot open video writer: {path}")
     return writer
+
+
+def _even_dimension(value: int) -> int:
+    return value if value % 2 == 0 else value + 1
 
 
 def _planned_total_frames(cap: cv2.VideoCapture, start_frame: int, max_frames: Optional[int]) -> Optional[int]:
@@ -230,14 +244,22 @@ class TrackingPipeline:
                 in_height,
                 self.n_downsample,
             )
+            thumbnail_size = thumbnail_size_for_frame(in_width, in_height, scale=16)
+            strip_width, strip_height = thumbnail_strip_size(
+                thumbnail_size,
+                max_thumbnails=MAX_DEBUG_THUMBNAILS,
+            )
+            render_width = _even_dimension(max(proc_width, strip_width))
+            scaled_debug_height = max(1, round(proc_height * (render_width / proc_width)))
+            render_height = _even_dimension(scaled_debug_height + strip_height)
 
             output = _start_output_session(
                 keyframe_directory=self.keyframe_directory,
                 effective_config_yaml=self.effective_config_yaml,
                 show_flow_vis=self.show_flow_vis,
                 fps=fps,
-                width=proc_width,
-                height=proc_height,
+                width=render_width,
+                height=render_height,
             )
 
             total_for_progress = _planned_total_frames(cap, self.start_frame, self.max_frames)
@@ -252,6 +274,7 @@ class TrackingPipeline:
             processed = 0
             keyframe_resets = 0
             keyframes_saved = 0
+            recent_keyframe_thumbnails: list = []
             stopped_by_user = False
             t0 = perf_counter()
 
@@ -271,6 +294,11 @@ class TrackingPipeline:
 
                     # Always keep the first processed frame as keyframe 0.
                     if processed == 0:
+                        recent_keyframe_thumbnails.insert(
+                            0,
+                            make_keyframe_thumbnail(frame, thumbnail_size),
+                        )
+                        del recent_keyframe_thumbnails[MAX_DEBUG_THUMBNAILS:]
                         keyframes_saved = _save_keyframe(
                             keyframe_dir=output.keyframe_dir,
                             keyframe_index=keyframes_saved,
@@ -285,6 +313,11 @@ class TrackingPipeline:
                         # Recompute anchor points on this frame and restart tracking from here.
                         self.tracker.reset_anchor_from_frame(proc_frame)
                         keyframe_resets += 1
+                        recent_keyframe_thumbnails.insert(
+                            0,
+                            make_keyframe_thumbnail(frame, thumbnail_size),
+                        )
+                        del recent_keyframe_thumbnails[MAX_DEBUG_THUMBNAILS:]
                         keyframes_saved = _save_keyframe(
                             keyframe_dir=output.keyframe_dir,
                             keyframe_index=keyframes_saved,
@@ -300,6 +333,13 @@ class TrackingPipeline:
                             result,
                             keyframes_saved=keyframes_saved,
                             decision=decision,
+                        )
+                        render_frame = resize_to_width(render_frame, render_width)
+                        render_frame = append_thumbnail_strip(
+                            render_frame,
+                            recent_keyframe_thumbnails,
+                            output_width=render_width,
+                            strip_height=render_height - render_frame.shape[0],
                         )
                     if output.writer is not None and render_frame is not None:
                         output.writer.write(render_frame)

@@ -9,6 +9,10 @@ from metrics import KeyframeDecision, survival_ratio
 from tracker import TrackingFrameResult
 
 
+THUMBNAIL_GAP = 6
+THUMBNAIL_PADDING = 8
+
+
 def draw_text_lines(
     img: np.ndarray,
     lines: Iterable[tuple[str, tuple[int, int, int]]],
@@ -89,4 +93,58 @@ def draw_tracks(
         )
 
     draw_text_lines(canvas, lines)
+    return canvas
+
+
+def thumbnail_size_for_frame(width: int, height: int, *, scale: int = 16) -> tuple[int, int]:
+    return (max(1, width // scale), max(1, height // scale))
+
+
+def thumbnail_strip_size(
+    thumbnail_size: tuple[int, int],
+    *,
+    max_thumbnails: int = 10,
+) -> tuple[int, int]:
+    thumb_w, thumb_h = thumbnail_size
+    width = (THUMBNAIL_PADDING * 2) + (thumb_w * max_thumbnails) + (THUMBNAIL_GAP * (max_thumbnails - 1))
+    height = (THUMBNAIL_PADDING * 2) + thumb_h
+    return (width, height)
+
+
+def make_keyframe_thumbnail(frame_bgr: np.ndarray, thumbnail_size: tuple[int, int]) -> np.ndarray:
+    return cv2.resize(frame_bgr, thumbnail_size, interpolation=cv2.INTER_AREA)
+
+
+def resize_to_width(frame_bgr: np.ndarray, output_width: int) -> np.ndarray:
+    height, width = frame_bgr.shape[:2]
+    if width == output_width:
+        return frame_bgr
+    output_height = max(1, round(height * (output_width / width)))
+    return cv2.resize(frame_bgr, (output_width, output_height), interpolation=cv2.INTER_LINEAR)
+
+
+def append_thumbnail_strip(
+    frame_bgr: np.ndarray,
+    thumbnails: list[np.ndarray],
+    *,
+    output_width: int,
+    strip_height: int,
+) -> np.ndarray:
+    frame_h, frame_w = frame_bgr.shape[:2]
+    canvas = np.zeros((frame_h + strip_height, output_width, 3), dtype=frame_bgr.dtype)
+    canvas[:frame_h, :frame_w] = frame_bgr
+
+    y = frame_h + THUMBNAIL_PADDING
+    x = THUMBNAIL_PADDING
+    max_thumb_h = max(0, strip_height - (THUMBNAIL_PADDING * 2))
+
+    for thumb in thumbnails:
+        thumb_h, thumb_w = thumb.shape[:2]
+        visible_w = min(thumb_w, output_width - x)
+        visible_h = min(thumb_h, max_thumb_h)
+        if visible_w <= 0 or visible_h <= 0:
+            break
+        canvas[y : y + visible_h, x : x + visible_w] = thumb[:visible_h, :visible_w]
+        x += thumb_w + THUMBNAIL_GAP
+
     return canvas

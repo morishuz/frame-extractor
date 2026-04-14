@@ -1,6 +1,6 @@
 # Frame Extractor
 
-Intelligently extract keyframes from video for SfM workflows to reduce processing time in COLMAP and similar reconstruction pipelines
+Dynamically extract keyframes from video for SfM workflows to reduce processing time in COLMAP and similar reconstruction pipelines
 
 ![Debug screenshot](images/screenshot_debug.png)
 
@@ -74,6 +74,8 @@ If `--keyframe-directory out` is provided, the tool writes:
 - `out/YYYYMMDD_HHMMSS.mp4` for the debug video when `--show-flow-vis` is enabled
 - `out/YYYYMMDD_HHMMSS.yaml` for the effective config snapshot used for the run
 - `out/YYYYMMDD_HHMMSS.txt` for the run summary
+
+When `--show-flow-vis` is enabled, the preview and debug video include a bottom strip of recent extracted-frame thumbnails. The newest extracted frame appears on the left and older frames shift to the right.
 
 Keyframes use this filename pattern:
 
