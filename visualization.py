@@ -111,8 +111,25 @@ def thumbnail_strip_size(
     return (width, height)
 
 
-def make_keyframe_thumbnail(frame_bgr: np.ndarray, thumbnail_size: tuple[int, int]) -> np.ndarray:
-    return cv2.resize(frame_bgr, thumbnail_size, interpolation=cv2.INTER_AREA)
+def make_keyframe_thumbnail(
+    frame_bgr: np.ndarray,
+    thumbnail_size: tuple[int, int],
+    *,
+    keyframe_index: int,
+) -> np.ndarray:
+    thumbnail = cv2.resize(frame_bgr, thumbnail_size, interpolation=cv2.INTER_AREA)
+    text = str(keyframe_index)
+    height, width = thumbnail.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = max(0.2, min(width, height) / 84.0)
+    thickness = max(1, round(font_scale * 2))
+    text_size, baseline = cv2.getTextSize(text, font, font_scale, thickness)
+    text_w, text_h = text_size
+    x = max(0, (width - text_w) // 2)
+    y = max(text_h, (height + text_h) // 2)
+    cv2.putText(thumbnail, text, (x + 1, y + 1), font, font_scale, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+    cv2.putText(thumbnail, text, (x, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    return thumbnail
 
 
 def resize_to_width(frame_bgr: np.ndarray, output_width: int) -> np.ndarray:

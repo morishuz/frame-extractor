@@ -296,7 +296,11 @@ class TrackingPipeline:
                     if processed == 0:
                         recent_keyframe_thumbnails.insert(
                             0,
-                            make_keyframe_thumbnail(frame, thumbnail_size),
+                            make_keyframe_thumbnail(
+                                frame,
+                                thumbnail_size,
+                                keyframe_index=keyframes_saved,
+                            ),
                         )
                         del recent_keyframe_thumbnails[MAX_DEBUG_THUMBNAILS:]
                         keyframes_saved = _save_keyframe(
@@ -315,7 +319,11 @@ class TrackingPipeline:
                         keyframe_resets += 1
                         recent_keyframe_thumbnails.insert(
                             0,
-                            make_keyframe_thumbnail(frame, thumbnail_size),
+                            make_keyframe_thumbnail(
+                                frame,
+                                thumbnail_size,
+                                keyframe_index=keyframes_saved,
+                            ),
                         )
                         del recent_keyframe_thumbnails[MAX_DEBUG_THUMBNAILS:]
                         keyframes_saved = _save_keyframe(
