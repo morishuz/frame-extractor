@@ -2,7 +2,7 @@
 
 Dynamically extract keyframes from video for SfM workflows to reduce processing time in COLMAP and similar reconstruction pipelines
 
-![Debug screenshot](images/screenshot_debug.png)
+![Debug screenshot](images/screenshot_debug_view.png)
 
 ## Install
 
