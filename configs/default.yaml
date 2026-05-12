@@ -1,0 +1,97 @@
+# Number of pyramid downsampling steps applied before flow/tracking.
+# 2 means width/height are each reduced by 4x. Higher is faster but coarser.
+n_downsample: 2
+
+# Maximum allowed per-frame point motion in original-video pixels before clipping.
+# Internally divided by 2^n_downsample for processing.
+# Set to 0 to disable clipping entirely.
+max_step_norm_original_px: 100.0
+
+dis:
+  # OpenCV DIS preset. Options: ultrafast, fast, medium.
+  preset: ultrafast
+
+  # Finest pyramid scale used by DIS. Lower can be more accurate but slower.
+  finest_scale: 1
+
+  # DIS patch size in pixels.
+  patch_size: 8
+
+  # DIS patch stride in pixels. Smaller is denser/slower.
+  patch_stride: 8
+
+  # Number of gradient descent iterations inside DIS.
+  gradient_descent_iterations: 12
+
+  # Number of variational refinement iterations.
+  # 0 is fastest and avoids the expensive refinement pass.
+  variational_refinement_iterations: 0
+
+  # Whether DIS should propagate flow spatially between nearby patches.
+  use_spatial_propagation: true
+
+sampling:
+  # Uniform sample-point spacing in original-video pixels across the whole image.
+  # Internally divided by 2^n_downsample so point density stays stable.
+  grid_step_original_px: 160
+
+  # Margin from the image border in original-video pixels when placing the initial grid.
+  min_margin_original_px: 16
+
+  # Distance outside the frame in original-video pixels at which a point is considered fully lost.
+  lost_border_original_px: 24.0
+
+scoring:
+  # Percentile of cumulative point displacement used for motion triggering.
+  # 90.0 means 10% of scored points have moved farther than this score.
+  percentile: 80.0
+
+trigger:
+  # Minimum age of the current keyframe track before motion can trigger a reset.
+  min_frames_since_keyframe: 2
+
+  # Force a virtual keyframe after this many frames even if motion stays low.
+  # Set to 0 to disable the interval trigger.
+  max_frames_since_keyframe: 1000
+
+  # Trigger a virtual keyframe when the global motion score reaches this original-video pixel value.
+  main_threshold_original_px: 400.0
+
+  # Trigger if fewer than this fraction of original points remain in bounds.
+  min_in_bounds_ratio: 0.40
+
+visualization:
+  # Draw cumulative displacement lines from keyframe start to current point.
+  show_displacement_vectors: false
+
+  # Radius of the current-position dots in the tracking view.
+  point_radius: 3
+
+  # Number of recent keyframes shown in the preview thumbnail row.
+  keyframe_thumbnail_slots: 8
+
+  # RGB color for tracked points and optional displacement lines.
+  point_color_rgb: [0,0,0]
+
+  # RGB color for the motion plot curve.
+  motion_plot_color_rgb: [255, 190, 70]
+
+  # RGB color for the in-bounds points plot curve.
+  points_plot_color_rgb: [120, 220, 90]
+
+  # RGB color for horizontal threshold lines in the plot panels.
+  threshold_line_color_rgb: [40, 120, 255]
+
+  # RGB color for vertical trigger lines in the plot panels.
+  trigger_line_color_rgb: [255, 0, 0]
+
+  # Maximum width of the preview/debug frame before resizing.
+  preview_max_width: 5000
+
+  # Save a debug MP4 when both --show-preview and --output-dir are provided.
+  save_debug_video: true
+
+output:
+  # Saved keyframe image format when --output-dir is provided.
+  # Options: jpg, png.
+  image_format: jpg
