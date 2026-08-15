@@ -1,10 +1,31 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 
 from frame_extractor.config import load_config
 from frame_extractor.config import load_default_config
 from frame_extractor.runner import run_experiment
+
+
+def _nonnegative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be an integer") from None
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
+    return parsed
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be an integer") from None
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -22,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=str,
         default=None,
-        help="Optional base output directory for logs, debug video, and keyframes",
+        help="Optional base output directory for metadata, debug video, and keyframes",
     )
     parser.add_argument(
         "--show-preview",
@@ -31,29 +52,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--start-frame",
-        type=int,
+        type=_nonnegative_int,
         default=0,
         help="First frame index to process",
     )
     parser.add_argument(
         "--max-frames",
-        type=int,
+        type=_positive_int,
         default=None,
         help="Maximum number of frames to process",
     )
     parser.add_argument(
         "--duration-frames",
-        type=int,
+        type=_positive_int,
         default=None,
         help="Alias for --max-frames: process this many frames starting at --start-frame",
     )
     return parser
 
 
-def main() -> None:
-    args = build_parser().parse_args()
-    if args.duration_frames is not None and args.max_frames is not None and args.duration_frames != args.max_frames:
-        raise ValueError("Use either --max-frames or --duration-frames, or pass the same value to both.")
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if (
+        args.duration_frames is not None
+        and args.max_frames is not None
+        and args.duration_frames != args.max_frames
+    ):
+        parser.error(
+            "Use either --max-frames or --duration-frames, "
+            "or pass the same value to both."
+        )
     max_frames = args.duration_frames if args.duration_frames is not None else args.max_frames
 
     try:

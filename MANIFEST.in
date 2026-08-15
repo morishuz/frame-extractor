@@ -1,0 +1,2 @@
+include configs/default.yaml
+recursive-include tests/fixtures *.json *.mov *.sh

@@ -62,19 +62,23 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "build" },
+    { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=1.24" },
-    { name = "opencv-python", specifier = ">=4.8" },
+    { name = "opencv-python", specifier = ">=4.11" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "build", specifier = ">=1.5.0" }]
+dev = [
+    { name = "build", specifier = ">=1.5.0" },
+    { name = "pytest", specifier = ">=8.0" },
+]
 
 [[package]]
 name = "importlib-metadata"

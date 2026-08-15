@@ -1,0 +1,53 @@
+{
+    "frames": [
+        {
+            "pts": 0,
+            "pts_time": "0.000000",
+            "pict_type": "I",
+            "side_data_list": [
+                {
+
+                }
+            ]
+        },
+        {
+            "pts": 24,
+            "pts_time": "0.040000",
+            "pict_type": "B"
+        },
+        {
+            "pts": 72,
+            "pts_time": "0.120000",
+            "pict_type": "B"
+        },
+        {
+            "pts": 96,
+            "pts_time": "0.160000",
+            "pict_type": "P"
+        },
+        {
+            "pts": 168,
+            "pts_time": "0.280000",
+            "pict_type": "P"
+        }
+    ],
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "codec_name": "h264",
+            "r_frame_rate": "25/1",
+            "avg_frame_rate": "125/7",
+            "time_base": "1/600",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 168,
+            "duration": "0.280000",
+            "nb_frames": "5"
+        }
+    ]
+}

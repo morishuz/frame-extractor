@@ -21,6 +21,7 @@ PANEL_PADDING = 10
 PLOT_GAP = 10
 THUMBNAIL_GAP = 8
 TEXT_OVERLAY_ALPHA = 0.5
+PLOT_HISTORY_FRAMES = 180
 
 
 @dataclass
@@ -48,6 +49,23 @@ def history_append(history: History, frame_scores: FrameScores, trigger_decision
     if trigger_decision.triggered:
         history.trigger_frames.append(frame_scores.frame_index)
         history.trigger_reasons.append(trigger_decision.reason)
+
+    overflow = len(history.frame_indices) - PLOT_HISTORY_FRAMES
+    if overflow > 0:
+        del history.frame_indices[:overflow]
+        del history.global_scores[:overflow]
+        del history.in_bounds_ratios[:overflow]
+
+    trigger_overflow = len(history.trigger_frames) - PLOT_HISTORY_FRAMES
+    if trigger_overflow > 0:
+        del history.trigger_frames[:trigger_overflow]
+        del history.trigger_reasons[:trigger_overflow]
+
+    if history.frame_indices:
+        earliest_frame = history.frame_indices[0]
+        while history.trigger_frames and history.trigger_frames[0] < earliest_frame:
+            del history.trigger_frames[0]
+            del history.trigger_reasons[0]
 
 
 def render_tracking_view(
@@ -137,7 +155,6 @@ def render_debug_dashboard(
         values=history.global_scores,
         threshold=config.trigger.main_threshold_original_px,
         trigger_events=trigger_events,
-        trigger_reason_key="main",
         width=plot_w,
         height=DASHBOARD_PLOT_HEIGHT,
         value_color=_rgb_to_bgr(config.visualization.motion_plot_color_rgb),
@@ -150,7 +167,6 @@ def render_debug_dashboard(
         values=history.in_bounds_ratios,
         threshold=config.trigger.min_in_bounds_ratio,
         trigger_events=trigger_events,
-        trigger_reason_key="in_bounds",
         width=plot_w,
         height=DASHBOARD_PLOT_HEIGHT,
         value_color=_rgb_to_bgr(config.visualization.points_plot_color_rgb),
@@ -331,7 +347,6 @@ def _render_live_metric_plot(
     values: Sequence[float],
     threshold: float,
     trigger_events: Sequence[tuple[int, str]],
-    trigger_reason_key: str,
     width: int,
     height: int,
     value_color: tuple[int, int, int],
@@ -354,7 +369,7 @@ def _render_live_metric_plot(
     plot_w = max(1, plot_right - plot_left)
     plot_h = max(1, plot_bottom - plot_top)
 
-    recent_count = min(len(frame_indices), 180)
+    recent_count = min(len(frame_indices), PLOT_HISTORY_FRAMES)
     xs = list(frame_indices[-recent_count:])
     ys = list(values[-recent_count:])
     x_min = min(xs)
@@ -381,9 +396,7 @@ def _render_live_metric_plot(
     cv2.line(panel, (plot_left, threshold_y), (plot_right, threshold_y), threshold_line_color, 1, cv2.LINE_AA)
 
     recent_trigger_events = [(frame, reason) for frame, reason in trigger_events if x_min <= frame <= x_max]
-    for frame, reason in recent_trigger_events:
-        if trigger_reason_key not in reason:
-            continue
+    for frame, _reason in recent_trigger_events:
         x = to_xy(frame, y_min)[0]
         cv2.line(panel, (x, plot_top), (x, plot_bottom), trigger_line_color, 1, cv2.LINE_AA)
 

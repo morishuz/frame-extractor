@@ -15,7 +15,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
   "numpy>=1.24",
-  "opencv-python>=4.8",
+  "opencv-python>=4.11",
   "pyyaml>=6.0",
 ]
 
@@ -41,4 +41,5 @@ where = ["src"]
 [dependency-groups]
 dev = [
     "build>=1.5.0",
+    "pytest>=8.0",
 ]

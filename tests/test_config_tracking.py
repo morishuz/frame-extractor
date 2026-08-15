@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from frame_extractor.config import DEFAULT_CONFIG
+from frame_extractor.config import REPO_DEFAULT_CONFIG_PATH
+from frame_extractor.config import load_config
 from frame_extractor.config import load_default_config
 from frame_extractor.config import parse_config
 from frame_extractor.tracking import FrameScores
@@ -14,6 +17,10 @@ def test_default_config_loads_current_yaml_values() -> None:
     assert config.dis.preset == "ultrafast"
     assert config.sampling.grid_step_original_px == 160
     assert config.trigger.main_threshold_original_px == 400.0
+
+
+def test_built_in_defaults_match_the_repository_yaml() -> None:
+    assert load_config(REPO_DEFAULT_CONFIG_PATH) == DEFAULT_CONFIG
 
 
 def test_original_pixel_values_are_converted_to_processing_pixels() -> None:
@@ -46,7 +53,7 @@ def test_motion_trigger_uses_minimum_keyframe_age() -> None:
     assert ready.display_reason == "motion"
 
 
-def test_points_trigger_reports_points_reason() -> None:
+def test_points_trigger_reports_low_points_reason() -> None:
     config = load_default_config()
     scores = FrameScores(
         frame_index=10,
@@ -59,4 +66,23 @@ def test_points_trigger_reports_points_reason() -> None:
     decision = decide_trigger(scores, config.trigger.min_frames_since_keyframe, config.trigger)
 
     assert decision.triggered
-    assert decision.display_reason == "points"
+    assert decision.display_reason == "low_points"
+
+
+def test_interval_and_combined_triggers_preserve_all_reasons() -> None:
+    config = load_default_config()
+    scores = FrameScores(
+        frame_index=config.trigger.max_frames_since_keyframe,
+        timestamp_sec=1.0,
+        global_score=config.trigger.main_threshold_original_px,
+        in_bounds_points=0,
+        in_bounds_ratio=0.0,
+    )
+
+    decision = decide_trigger(
+        scores,
+        config.trigger.max_frames_since_keyframe,
+        config.trigger,
+    )
+
+    assert decision.display_reason == "motion+low_points+interval"

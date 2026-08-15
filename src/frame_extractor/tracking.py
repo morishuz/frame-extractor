@@ -10,6 +10,13 @@ from frame_extractor.config import FrameExtractorConfig
 from frame_extractor.config import TriggerConfig
 
 
+_TRIGGER_REASON_LABELS = {
+    "main": "motion",
+    "in_bounds": "low_points",
+    "interval": "interval",
+}
+
+
 @dataclass
 class TrackingState:
     origin_points: np.ndarray
@@ -41,9 +48,10 @@ class TriggerDecision:
     def display_reason(self) -> str:
         if not self.triggered:
             return ""
-        if "in_bounds" in self.reason:
-            return "points"
-        return "motion"
+        return "+".join(
+            _TRIGGER_REASON_LABELS.get(reason, reason)
+            for reason in self.reason.split("+")
+        )
 
 
 def ensure_gray(frame: np.ndarray) -> np.ndarray:
