@@ -9,11 +9,12 @@ import cv2
 import numpy as np
 
 from frame_extractor.config import FrameExtractorConfig
+from frame_extractor.status import comparison_label
+from frame_extractor.status import tracking_status_lines
 from frame_extractor.tracking import FlowStepDiagnostics
 from frame_extractor.tracking import FrameScores
 from frame_extractor.tracking import TrackingState
 from frame_extractor.tracking import TriggerDecision
-from frame_extractor.tracking import comparison_label
 
 
 DASHBOARD_PLOT_HEIGHT = 150
@@ -106,31 +107,15 @@ def render_tracking_view(
         )
 
     trigger_color = (0, 0, 255) if trigger_decision.triggered else (255, 255, 255)
+    status_lines = tracking_status_lines(
+        frame_scores,
+        trigger_decision,
+        config=config,
+        keyframe_count=keyframe_count,
+    )
     lines = [
-        (
-            f"frame: {frame_scores.frame_index}    time: {frame_scores.timestamp_sec:.3f}s",
-            (255, 255, 255),
-        ),
-        (
-            f"frames since last trigger: {trigger_decision.frames_since_keyframe}",
-            (255, 255, 255),
-        ),
-        (
-            f"number of keyframes: {keyframe_count}",
-            (255, 255, 255),
-        ),
-        (
-            f"motion: {comparison_label(frame_scores.global_score, config.trigger.main_threshold_original_px)}",
-            (255, 255, 255),
-        ),
-        (
-            f"points: {comparison_label(frame_scores.in_bounds_ratio, config.trigger.min_in_bounds_ratio)}",
-            (255, 255, 255),
-        ),
-        (
-            f"trigger: {trigger_decision.display_reason}",
-            trigger_color,
-        ),
+        (line, trigger_color if index == len(status_lines) - 1 else (255, 255, 255))
+        for index, line in enumerate(status_lines)
     ]
     _draw_text_block(canvas, lines)
     return canvas

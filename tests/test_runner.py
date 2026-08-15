@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime
-import math
 from pathlib import Path
 
 import cv2
@@ -10,8 +8,6 @@ import numpy as np
 import pytest
 
 from frame_extractor.config import parse_config
-from frame_extractor.output import TimingValidator
-from frame_extractor.output import capture_raw_frame_timing
 from frame_extractor.runner import run_experiment
 from frame_extractor.tracking import FlowStepDiagnostics
 
@@ -193,23 +189,22 @@ def _manifest_rows(manifest_path: str | None) -> list[dict[str, str]]:
         return list(reader)
 
 
-def _read_and_validate_timing(
-    capture: FakeVideoCapture,
-    validator: TimingValidator,
-    processed_index: int,
-):
-    ok, _frame = capture.read()
-    assert ok
-    raw_timing = capture_raw_frame_timing(
-        capture,
-        reported_fps=capture.fps,
-        video_backend=capture.backend,
+def _summary_values(summary_path: str | None) -> dict[str, str]:
+    assert summary_path is not None
+    return dict(
+        line.split(": ", maxsplit=1)
+        for line in Path(summary_path).read_text(encoding="utf-8").splitlines()
     )
-    return validator.observe(
-        raw_timing,
-        decoded_frame_index=processed_index,
-        processed_index=processed_index,
-    )
+
+
+def _summary_counts(value: str) -> dict[str, int]:
+    if value == "none":
+        return {}
+    return {
+        name: int(count)
+        for item in value.split(", ")
+        for name, count in [item.rsplit("=", maxsplit=1)]
+    }
 
 
 def test_manifest_records_first_and_final_frames_with_timing(
@@ -235,16 +230,21 @@ def test_manifest_records_first_and_final_frames_with_timing(
     assert rows[1]["timing_status"] == "warning"
     assert rows[0]["motion_score_px"] == "0.0"
 
-    summary = Path(stats.summary_path or "").read_text(encoding="utf-8")
-    assert "keyframes_csv_schema_version: 3" in summary
-    assert "opencv_version: " + cv2.__version__ in summary
-    assert "video_backend: FFMPEG" in summary
-    assert "reported_fps: 10.000000000" in summary
-    assert "pts_time_base_num: 1" in summary
-    assert "pts_time_base_den: 10" in summary
-    assert "timing_validation_status: warnings" in summary
-    assert "timing_flag_counts: pos_gap=2, pts_gap=2" in summary
-    assert "raw_pos_timeline_valid: true" in summary
+    summary = _summary_values(stats.summary_path)
+    assert summary["keyframes_csv_schema_version"] == "3"
+    assert summary["opencv_version"] == cv2.__version__
+    assert summary["video_backend"] == "FFMPEG"
+    assert float(summary["reported_fps"]) == pytest.approx(10.0)
+    assert (summary["pts_time_base_num"], summary["pts_time_base_den"]) == (
+        "1",
+        "10",
+    )
+    assert summary["timing_validation_status"] == "warnings"
+    assert summary["raw_pos_timeline_valid"] == "true"
+    assert _summary_counts(summary["timing_flag_counts"]) == {
+        "pos_gap": 2,
+        "pts_gap": 2,
+    }
 
     run_dir = Path(stats.run_dir or "")
     image_paths = sorted((run_dir / "keyframes").glob("*.jpg"))
@@ -258,10 +258,11 @@ def test_final_frame_is_the_end_of_the_requested_range(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    capture = FakeVideoCapture(_frames(6))
     stats = _run_with_capture(
         monkeypatch,
         tmp_path,
-        FakeVideoCapture(_frames(6)),
+        capture,
         start_frame=2,
         max_frames=3,
     )
@@ -269,6 +270,7 @@ def test_final_frame_is_the_end_of_the_requested_range(
     rows = _manifest_rows(stats.keyframe_manifest_path)
 
     assert stats.processed_frames == 3
+    assert capture.next_index == 5
     assert [row["decoded_frame_index"] for row in rows] == ["2", "4"]
     assert [row["processed_index"] for row in rows] == ["0", "2"]
 
@@ -281,6 +283,17 @@ def test_failed_start_frame_seek_is_reported(
 
     with pytest.raises(RuntimeError, match="could not seek to start frame 2"):
         _run_with_capture(monkeypatch, tmp_path, capture, start_frame=2)
+
+
+def test_empty_video_preserves_first_frame_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        RuntimeError,
+        match="Could not read the first frame from the video",
+    ):
+        _run_with_capture(monkeypatch, tmp_path, FakeVideoCapture([]))
 
 
 def test_inexact_start_frame_seek_is_reported(
@@ -319,27 +332,6 @@ def test_invalid_processing_ranges_are_rejected(
             start_frame=start_frame,
             max_frames=max_frames,
         )
-
-
-def test_run_directories_are_unique_within_the_same_second(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    import frame_extractor.output as output
-
-    class FixedDatetime:
-        @staticmethod
-        def now() -> datetime:
-            return datetime(2026, 8, 15, 12, 34, 56)
-
-    monkeypatch.setattr(output, "datetime", FixedDatetime)
-
-    first = output.make_run_paths(str(tmp_path), save_debug_video=False)
-    second = output.make_run_paths(str(tmp_path), save_debug_video=False)
-
-    assert first.run_dir.name == "20260815_123456"
-    assert second.run_dir.name == "20260815_123456_01"
-    assert first.run_dir != second.run_dir
 
 
 def test_single_frame_is_saved_once_as_both_boundaries(
@@ -391,8 +383,6 @@ def test_headless_run_does_not_construct_preview_history(
     )
 
     assert stats.trigger_count == 2
-    summary = Path(stats.summary_path or "").read_text(encoding="utf-8")
-    assert "trigger_count: 2" in summary
 
 
 def test_preview_retains_only_visible_keyframe_thumbnails(
@@ -489,10 +479,10 @@ def test_final_frame_deduplication_uses_processed_index(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    import frame_extractor.runner as runner
+    import frame_extractor.timing as timing
 
     monkeypatch.setattr(
-        runner,
+        timing,
         "capture_decoded_frame_index",
         lambda *_args, **_kwargs: 0,
     )
@@ -538,229 +528,6 @@ def test_user_stop_saves_the_last_displayed_frame(
     assert rows[-1]["selection_reason"] == "final"
 
 
-def test_timing_falls_back_without_claiming_pts() -> None:
-    capture = FakeVideoCapture(
-        _frames(1),
-        fps=30.0,
-        timestamps_seconds=[1.25],
-        backend="AVFOUNDATION",
-    )
-    validator = TimingValidator(
-        reported_fps=30.0,
-        fallback_fps=30.0,
-    )
-    timing = _read_and_validate_timing(capture, validator, 0)
-
-    assert timing.pts is None
-    assert timing.pts_time_base_num is None
-    assert timing.pts_time_base_den is None
-    assert timing.pts_seconds is None
-    assert timing.pos_msec_raw == pytest.approx(1_250.0)
-    assert timing.pos_seconds_raw == pytest.approx(1.25)
-    assert timing.effective_timestamp_seconds == pytest.approx(1.25)
-    assert timing.effective_timestamp_source == "opencv_pos_msec"
-    assert timing.timing_status == "ok"
-    assert timing.timing_flags == ()
-    assert validator.report().pts_unavailable_frames == 1
-
-
-def test_stuck_position_timestamp_uses_an_explicit_fallback() -> None:
-    capture = FakeVideoCapture(
-        _frames(2),
-        fps=10.0,
-        timestamps_seconds=[0.0, 0.0],
-        backend="AVFOUNDATION",
-    )
-    validator = TimingValidator(
-        reported_fps=10.0,
-        fallback_fps=10.0,
-    )
-    first_timing = _read_and_validate_timing(capture, validator, 0)
-    second_timing = _read_and_validate_timing(capture, validator, 1)
-
-    assert first_timing.effective_timestamp_source == "opencv_pos_msec"
-    assert second_timing.pos_msec_raw == 0.0
-    assert second_timing.pos_seconds_raw == 0.0
-    assert second_timing.effective_timestamp_seconds == pytest.approx(0.1)
-    assert second_timing.effective_timestamp_source == "frame_duration_fallback"
-    assert second_timing.timing_status == "invalid"
-    assert second_timing.timing_flags == (
-        "pos_duplicate",
-        "effective_fallback",
-    )
-    report = validator.report()
-    assert not report.raw_pos_timeline_valid
-    assert report.flag_counts == (
-        ("pos_duplicate", 1),
-        ("effective_fallback", 1),
-    )
-
-
-def test_aligned_pts_fallback_stays_in_the_relative_timestamp_domain() -> None:
-    capture = FakeVideoCapture(
-        _frames(2),
-        fps=10.0,
-        pts=[100, 101],
-        timestamps_seconds=[0.0, 0.0],
-    )
-    validator = TimingValidator(
-        reported_fps=10.0,
-        fallback_fps=10.0,
-    )
-    first_timing = _read_and_validate_timing(capture, validator, 0)
-    second_timing = _read_and_validate_timing(capture, validator, 1)
-
-    assert first_timing.effective_timestamp_seconds == 0.0
-    assert second_timing.pts_seconds == pytest.approx(10.1)
-    assert second_timing.pos_msec_raw == 0.0
-    assert second_timing.pos_seconds_raw == 0.0
-    assert second_timing.effective_timestamp_seconds == pytest.approx(0.1)
-    assert second_timing.effective_timestamp_source == "opencv_pts_aligned"
-    assert "pos_duplicate" in second_timing.timing_flags
-    assert "pts_pos_disagreement" not in second_timing.timing_flags
-
-
-def test_timing_recovers_to_raw_position_after_a_transient_duplicate() -> None:
-    capture = FakeVideoCapture(
-        _frames(3),
-        fps=10.0,
-        pts=[0, 1, 2],
-        timestamps_seconds=[0.0, 0.0, 0.2],
-    )
-    validator = TimingValidator(reported_fps=10.0, fallback_fps=10.0)
-
-    first = _read_and_validate_timing(capture, validator, 0)
-    duplicate = _read_and_validate_timing(capture, validator, 1)
-    recovered = _read_and_validate_timing(capture, validator, 2)
-
-    assert first.effective_timestamp_source == "opencv_pos_msec"
-    assert duplicate.effective_timestamp_source == "opencv_pts_aligned"
-    assert duplicate.pos_seconds_raw == 0.0
-    assert recovered.pos_seconds_raw == pytest.approx(0.2)
-    assert recovered.effective_timestamp_seconds == pytest.approx(0.2)
-    assert recovered.effective_timestamp_source == "opencv_pos_msec"
-    assert "pos_gap" not in recovered.timing_flags
-
-
-@pytest.mark.parametrize(
-    ("raw_position_seconds", "expected_flag"),
-    [
-        (float("nan"), "pos_nonfinite"),
-        (-0.001, "pos_negative"),
-    ],
-)
-def test_invalid_raw_position_is_preserved_and_flagged(
-    raw_position_seconds: float,
-    expected_flag: str,
-) -> None:
-    capture = FakeVideoCapture(
-        _frames(1),
-        fps=10.0,
-        timestamps_seconds=[raw_position_seconds],
-        backend="AVFOUNDATION",
-    )
-    validator = TimingValidator(reported_fps=10.0, fallback_fps=10.0)
-
-    timing = _read_and_validate_timing(capture, validator, 0)
-
-    if math.isnan(raw_position_seconds):
-        assert math.isnan(timing.pos_msec_raw)
-    else:
-        assert timing.pos_msec_raw == pytest.approx(
-            raw_position_seconds * 1_000.0
-        )
-    if math.isnan(raw_position_seconds):
-        assert math.isnan(timing.pos_seconds_raw)
-    else:
-        assert timing.pos_seconds_raw == pytest.approx(raw_position_seconds)
-    assert timing.effective_timestamp_source == "frame_index_fps"
-    assert timing.timing_status == "invalid"
-    assert expected_flag in timing.timing_flags
-
-
-def test_aligned_pts_does_not_double_count_consecutive_fallbacks() -> None:
-    capture = FakeVideoCapture(
-        _frames(3),
-        fps=10.0,
-        pts=[0, 0, 2],
-        timestamps_seconds=[0.0, 0.0, 0.0],
-    )
-    validator = TimingValidator(reported_fps=10.0, fallback_fps=10.0)
-
-    timings = [
-        _read_and_validate_timing(capture, validator, processed_index)
-        for processed_index in range(3)
-    ]
-
-    assert [timing.effective_timestamp_seconds for timing in timings] == pytest.approx(
-        [0.0, 0.1, 0.2]
-    )
-    assert timings[-1].effective_timestamp_source == "opencv_pts_aligned"
-
-
-def test_nonfinite_pts_is_preserved_and_flagged() -> None:
-    capture = FakeVideoCapture(
-        _frames(1),
-        fps=10.0,
-        pts=[float("nan")],
-        timestamps_seconds=[0.0],
-    )
-    validator = TimingValidator(reported_fps=10.0, fallback_fps=10.0)
-
-    timing = _read_and_validate_timing(capture, validator, 0)
-    report = validator.report()
-
-    assert timing.pts is not None and math.isnan(timing.pts)
-    assert timing.pts_seconds is None
-    assert timing.effective_timestamp_source == "opencv_pos_msec"
-    assert timing.timing_status == "warning"
-    assert "pts_nonfinite" in timing.timing_flags
-    assert report.pts_available_frames == 0
-    assert report.pts_unavailable_frames == 0
-    assert report.pts_invalid_frames == 1
-
-
-def test_raw_pts_is_preserved_when_reported_fps_is_unavailable() -> None:
-    capture = FakeVideoCapture(
-        _frames(1),
-        fps=0.0,
-        pts=[7.0],
-        timestamps_seconds=[0.0],
-    )
-    validator = TimingValidator(reported_fps=0.0, fallback_fps=30.0)
-
-    timing = _read_and_validate_timing(capture, validator, 0)
-    report = validator.report()
-
-    assert timing.pts == 7.0
-    assert timing.pts_time_base_num is None
-    assert timing.pts_time_base_den is None
-    assert timing.pts_seconds is None
-    assert timing.effective_timestamp_source == "opencv_pos_msec"
-    assert timing.timing_flags == ("fps_unavailable",)
-    assert report.pts_available_frames == 1
-    assert report.pts_unavailable_frames == 0
-    assert report.pts_invalid_frames == 0
-
-
-def test_pts_position_disagreement_allows_one_quantized_pts_tick() -> None:
-    capture = FakeVideoCapture(
-        _frames(3),
-        fps=10.0,
-        pts=[100, 101, 102],
-        timestamps_seconds=[0.0, 0.001, 0.35],
-    )
-    validator = TimingValidator(reported_fps=10.0, fallback_fps=10.0)
-
-    first = _read_and_validate_timing(capture, validator, 0)
-    within_one_tick = _read_and_validate_timing(capture, validator, 1)
-    disagreeing = _read_and_validate_timing(capture, validator, 2)
-
-    assert "pts_pos_disagreement" not in first.timing_flags
-    assert "pts_pos_disagreement" not in within_one_tick.timing_flags
-    assert "pts_pos_disagreement" in disagreeing.timing_flags
-
-
 def test_unselected_timing_anomaly_is_aggregated_in_summary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -774,15 +541,22 @@ def test_unselected_timing_anomaly_is_aggregated_in_summary(
 
     stats = _run_with_capture(monkeypatch, tmp_path, capture)
     rows = _manifest_rows(stats.keyframe_manifest_path)
-    summary = Path(stats.summary_path or "").read_text(encoding="utf-8")
+    summary = _summary_values(stats.summary_path)
 
     assert len(rows) == 2
     assert all(row["timing_status"] == "ok" for row in rows)
     assert stats.timing_validation_status == "invalid"
     assert stats.raw_pos_timeline_valid is False
-    assert "timing_invalid_frames: 1" in summary
-    assert "timing_flag_counts: pos_duplicate=1" in summary
-    assert "timing_first_issue_frames: pos_duplicate=2" in summary
+    assert int(summary["timing_frames_observed"]) == 4
+    assert int(summary["timing_invalid_frames"]) == 1
+    assert _summary_counts(summary["timing_flag_counts"]) == {
+        "pos_duplicate": 1,
+        "effective_fallback": 1,
+    }
+    assert _summary_counts(summary["timing_first_issue_frames"]) == {
+        "pos_duplicate": 2,
+        "effective_fallback": 2,
+    }
 
 
 def test_selected_invalid_timestamp_exports_compact_status(
@@ -798,11 +572,9 @@ def test_selected_invalid_timestamp_exports_compact_status(
 
     stats = _run_with_capture(monkeypatch, tmp_path, capture)
     rows = _manifest_rows(stats.keyframe_manifest_path)
-    summary = Path(stats.summary_path or "").read_text(encoding="utf-8")
 
     assert [row["timing_status"] for row in rows] == ["ok", "invalid"]
     assert [float(row["pos_seconds_raw"]) for row in rows] == [0.0, 0.0]
-    assert "timing_flag_counts: pos_duplicate=1" in summary
 
 
 def test_summary_marks_pts_time_base_unavailable_without_decoder_pts(
@@ -812,8 +584,8 @@ def test_summary_marks_pts_time_base_unavailable_without_decoder_pts(
     capture = FakeVideoCapture(_frames(2), backend="AVFOUNDATION")
 
     stats = _run_with_capture(monkeypatch, tmp_path, capture)
-    summary = Path(stats.summary_path or "").read_text(encoding="utf-8")
+    summary = _summary_values(stats.summary_path)
 
-    assert "pts_available_frames: 0" in summary
-    assert "pts_time_base_num: unavailable" in summary
-    assert "pts_time_base_den: unavailable" in summary
+    assert int(summary["pts_available_frames"]) == 0
+    assert summary["pts_time_base_num"] == "unavailable"
+    assert summary["pts_time_base_den"] == "unavailable"

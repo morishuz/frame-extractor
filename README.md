@@ -120,10 +120,12 @@ src/frame_extractor/
   __init__.py
   cli.py          # command-line argument parsing
   config.py       # typed config loading/validation
-  output.py       # frame timing/validation plus output manifests, summaries, and video
+  output.py       # output paths, images, manifests, summaries, and debug video
   preview.py      # OpenCV preview/dashboard rendering
   runner.py       # main extraction loop
+  status.py       # shared preview/terminal status formatting
   terminal.py     # live terminal status/progress
+  timing.py       # video reads, frame timestamps/indices, and timing validation
   tracking.py     # DIS flow, point tracking, scoring, trigger logic
 configs/
   default.yaml
@@ -135,6 +137,7 @@ tests/
   test_config_tracking.py
   test_output_runner.py
   test_preview.py
+  test_status.py
   test_tracking_math.py
   test_video_timing_regression.py
 ```

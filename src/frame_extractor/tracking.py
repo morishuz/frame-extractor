@@ -188,16 +188,6 @@ def decide_trigger(frame_scores: FrameScores, frames_since_keyframe: int, config
     )
 
 
-def comparison_label(value: float, threshold: float) -> str:
-    if np.isclose(value, threshold):
-        relation = "="
-    elif value < threshold:
-        relation = "<"
-    else:
-        relation = ">"
-    return f"{value:.2f} {relation} {threshold:.2f}"
-
-
 def _grid_axis(length: int, step: int, margin: int) -> np.ndarray:
     start = min(max(margin, 0), max(length - 1, 0))
     stop = max(start + 1, length - max(margin, 0))

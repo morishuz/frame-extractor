@@ -4,9 +4,9 @@ import sys
 from dataclasses import dataclass
 
 from frame_extractor.config import FrameExtractorConfig
+from frame_extractor.status import tracking_status_lines
 from frame_extractor.tracking import FrameScores
 from frame_extractor.tracking import TriggerDecision
-from frame_extractor.tracking import comparison_label
 
 
 ANSI_CLEAR_LINE = "\x1b[2K"
@@ -70,12 +70,12 @@ def _terminal_status_lines(
         file_line += f"    {ANSI_RED}WARNING: no --output-dir, no files written{ANSI_RESET}"
     return [
         file_line,
-        f"frame: {frame_scores.frame_index}    time: {frame_scores.timestamp_sec:.3f}s",
-        f"frames since last trigger: {trigger_decision.frames_since_keyframe}",
-        f"number of keyframes: {keyframe_count}",
-        f"motion: {comparison_label(frame_scores.global_score, config.trigger.main_threshold_original_px)}",
-        f"points: {comparison_label(frame_scores.in_bounds_ratio, config.trigger.min_in_bounds_ratio)}",
-        f"trigger: {trigger_decision.display_reason}",
+        *tracking_status_lines(
+            frame_scores,
+            trigger_decision,
+            config=config,
+            keyframe_count=keyframe_count,
+        ),
     ]
 
 

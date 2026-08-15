@@ -3,11 +3,13 @@ from __future__ import annotations
 import numpy as np
 
 from frame_extractor.config import parse_config
+from frame_extractor.tracking import FlowStepDiagnostics
 from frame_extractor.tracking import TrackingState
 from frame_extractor.tracking import _beyond_lost_border
 from frame_extractor.tracking import _bilinear_sample_flow
 from frame_extractor.tracking import _clip_vectors
 from frame_extractor.tracking import _inside_image
+from frame_extractor.tracking import compute_frame_scores
 from frame_extractor.tracking import initialize_tracking_state
 from frame_extractor.tracking import step_tracking
 
@@ -158,6 +160,45 @@ def test_tracking_grid_preserves_original_pixel_placement_when_downsampled() -> 
     np.testing.assert_array_equal(quarter_state.origin_points * 4.0, full_state.origin_points)
     np.testing.assert_array_equal(full_state.current_points, full_state.origin_points)
     np.testing.assert_array_equal(full_state.alive_mask, np.ones(12, dtype=bool))
+
+
+def test_compute_frame_scores_uses_valid_displacements_in_original_pixels() -> None:
+    config = parse_config(
+        {
+            "n_downsample": 2,
+            "scoring": {"percentile": 50.0},
+        }
+    )
+    state = TrackingState(
+        origin_points=np.zeros((4, 2), dtype=np.float32),
+        current_points=np.array(
+            [
+                [0.0, 1.0],  # Valid: 1 processing px = 4 original px.
+                [0.0, 2.0],  # Excluded because it is out of bounds.
+                [0.0, 3.0],  # Excluded because the point is no longer alive.
+                [0.0, 4.0],  # Valid: 4 processing px = 16 original px.
+            ],
+            dtype=np.float32,
+        ),
+        alive_mask=np.array([True, True, False, True]),
+    )
+    diagnostics = FlowStepDiagnostics(
+        in_bounds_mask=np.array([True, False, True, True])
+    )
+
+    scores = compute_frame_scores(
+        state,
+        diagnostics,
+        frame_index=17,
+        timestamp_sec=1.25,
+        config=config,
+    )
+
+    assert scores.frame_index == 17
+    assert scores.timestamp_sec == 1.25
+    assert scores.global_score == 10.0
+    assert scores.in_bounds_points == 2
+    assert scores.in_bounds_ratio == 0.5
 
 
 def test_step_tracking_applies_fixed_flow_clipping_and_lost_border() -> None:

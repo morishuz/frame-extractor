@@ -10,20 +10,14 @@ import numpy as np
 
 from frame_extractor.config import FrameExtractorConfig
 from frame_extractor.config import dump_config_yaml
-from frame_extractor.output import FrameTiming
 from frame_extractor.output import KeyframeRecord
 from frame_extractor.output import RunPaths
 from frame_extractor.output import RunStats
-from frame_extractor.output import TimingValidator
-from frame_extractor.output import capture_decoded_frame_index
-from frame_extractor.output import capture_raw_frame_timing
 from frame_extractor.output import create_video_writer
 from frame_extractor.output import make_run_paths
-from frame_extractor.output import open_video
 from frame_extractor.output import pad_to_even
 from frame_extractor.output import resize_to_max_width
 from frame_extractor.output import save_keyframe
-from frame_extractor.output import video_backend_name
 from frame_extractor.output import write_keyframe_manifest
 from frame_extractor.output import write_summary
 from frame_extractor.preview import History
@@ -33,6 +27,11 @@ from frame_extractor.preview import history_append
 from frame_extractor.preview import render_debug_dashboard
 from frame_extractor.preview import render_tracking_view
 from frame_extractor.terminal import TerminalProgress
+from frame_extractor.timing import FrameTiming
+from frame_extractor.timing import TimingValidator
+from frame_extractor.timing import open_video
+from frame_extractor.timing import read_timed_frame
+from frame_extractor.timing import video_backend_name
 from frame_extractor.tracking import FrameScores
 from frame_extractor.tracking import FlowStepDiagnostics
 from frame_extractor.tracking import TrackingState
@@ -96,24 +95,22 @@ def run_experiment(
         else:
             progress_total_frames = None
 
-        ok, first_frame_full = cap.read()
-        if not ok:
-            raise RuntimeError("Could not read the first frame from the video")
-        first_frame_raw_timing = capture_raw_frame_timing(
+        first_decoded_frame = read_timed_frame(
             cap,
+            timing_validator=timing_validator,
             reported_fps=reported_fps,
             video_backend=video_backend,
-        )
-        first_frame_index = capture_decoded_frame_index(
-            cap,
-            start_frame,
-            required_index=start_frame if start_frame > 0 else None,
-        )
-        first_frame_timing = timing_validator.observe(
-            first_frame_raw_timing,
-            decoded_frame_index=first_frame_index,
             processed_index=0,
+            fallback_decoded_frame_index=start_frame,
+            required_decoded_frame_index=(
+                start_frame if start_frame > 0 else None
+            ),
         )
+        if first_decoded_frame is None:
+            raise RuntimeError("Could not read the first frame from the video")
+        first_frame_full = first_decoded_frame.frame_bgr
+        first_frame_index = first_decoded_frame.decoded_frame_index
+        first_frame_timing = first_decoded_frame.timing
 
         processed_first_frame = downsample_frame(first_frame_full, config.n_downsample)
         prev_gray = ensure_gray(processed_first_frame)
@@ -140,7 +137,7 @@ def run_experiment(
             first_frame_full,
             config,
             virtual_keyframe_index,
-            0,
+            first_decoded_frame.processed_index,
             first_frame_index,
             first_frame_timing,
             selection_reason="first",
@@ -164,7 +161,7 @@ def run_experiment(
         history = History() if visual_debug_enabled else None
         trigger_count = 0
         frames_since_keyframe = 0
-        processed_frames = 1
+        processed_frames = first_decoded_frame.processed_index + 1
         current_frame_index = first_frame_index
         current_frame_full = first_frame_full
         current_frame_timing = first_frame_timing
@@ -190,23 +187,20 @@ def run_experiment(
             if max_frames is not None and processed_frames >= max_frames:
                 break
 
-            ok, next_frame_full = cap.read()
-            if not ok:
-                break
-            current_frame_full = next_frame_full
-
-            current_frame_raw_timing = capture_raw_frame_timing(
+            next_decoded_frame = read_timed_frame(
                 cap,
+                timing_validator=timing_validator,
                 reported_fps=reported_fps,
                 video_backend=video_backend,
+                processed_index=processed_frames,
+                fallback_decoded_frame_index=current_frame_index + 1,
             )
-            current_frame_index = capture_decoded_frame_index(cap, current_frame_index + 1)
-            processed_frames += 1
-            current_frame_timing = timing_validator.observe(
-                current_frame_raw_timing,
-                decoded_frame_index=current_frame_index,
-                processed_index=processed_frames - 1,
-            )
+            if next_decoded_frame is None:
+                break
+            current_frame_full = next_decoded_frame.frame_bgr
+            current_frame_index = next_decoded_frame.decoded_frame_index
+            current_frame_timing = next_decoded_frame.timing
+            processed_frames = next_decoded_frame.processed_index + 1
 
             current_frame = downsample_frame(current_frame_full, config.n_downsample)
             current_gray = ensure_gray(current_frame)

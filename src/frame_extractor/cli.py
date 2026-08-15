@@ -2,29 +2,20 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from functools import partial
 
 from frame_extractor.config import load_config
 from frame_extractor.config import load_default_config
 from frame_extractor.runner import run_experiment
 
 
-def _nonnegative_int(value: str) -> int:
+def _int_at_least(value: str, *, minimum: int) -> int:
     try:
         parsed = int(value)
     except ValueError:
         raise argparse.ArgumentTypeError("must be an integer") from None
-    if parsed < 0:
-        raise argparse.ArgumentTypeError("must be >= 0")
-    return parsed
-
-
-def _positive_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError:
-        raise argparse.ArgumentTypeError("must be an integer") from None
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be > 0")
+    if parsed < minimum:
+        raise argparse.ArgumentTypeError(f"must be >= {minimum}")
     return parsed
 
 
@@ -52,19 +43,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--start-frame",
-        type=_nonnegative_int,
+        type=partial(_int_at_least, minimum=0),
         default=0,
         help="First frame index to process",
     )
     parser.add_argument(
         "--max-frames",
-        type=_positive_int,
+        type=partial(_int_at_least, minimum=1),
         default=None,
         help="Maximum number of frames to process",
     )
     parser.add_argument(
         "--duration-frames",
-        type=_positive_int,
+        type=partial(_int_at_least, minimum=1),
         default=None,
         help="Alias for --max-frames: process this many frames starting at --start-frame",
     )
@@ -88,10 +79,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     try:
         config = load_config(args.config) if args.config is not None else load_default_config()
     except FileNotFoundError as exc:
-        message = str(exc)
-        if args.config == "configs/dis_flow_experiment.yaml":
-            message += "\nThe DIS config is now the default config. Use --config configs/default.yaml, or omit --config."
-        raise SystemExit(message) from None
+        raise SystemExit(str(exc)) from None
 
     run_experiment(
         args.input_video,

@@ -8,6 +8,7 @@ from frame_extractor import cli
 @pytest.mark.parametrize(
     "arguments",
     [
+        ["--start-frame", "not-an-integer"],
         ["--start-frame", "-1"],
         ["--max-frames", "0"],
         ["--max-frames", "-1"],
@@ -19,6 +20,15 @@ def test_cli_rejects_invalid_processing_ranges(arguments: list[str]) -> None:
         cli.build_parser().parse_args(["input.mp4", *arguments])
 
     assert exc_info.value.code == 2
+
+
+def test_cli_accepts_boundary_processing_ranges() -> None:
+    args = cli.build_parser().parse_args(
+        ["input.mp4", "--start-frame", "0", "--max-frames", "1"]
+    )
+
+    assert args.start_frame == 0
+    assert args.max_frames == 1
 
 
 def test_cli_reports_conflicting_frame_limits_as_an_argument_error() -> None:
@@ -57,3 +67,15 @@ def test_cli_accepts_matching_frame_limit_aliases(
     )
 
     assert observed["max_frames"] == 10
+
+
+def test_cli_reports_missing_config_without_legacy_migration_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing_config(_path: str) -> None:
+        raise FileNotFoundError("configuration not found")
+
+    monkeypatch.setattr(cli, "load_config", missing_config)
+
+    with pytest.raises(SystemExit, match="^configuration not found$"):
+        cli.main(["input.mp4", "--config", "missing.yaml"])
