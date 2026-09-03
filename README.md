@@ -2,6 +2,8 @@
 
 Dynamically extract keyframes from video for SfM workflows to reduce processing time in COLMAP and similar reconstruction pipelines.
 
+**This project has evolved into [Adaptive Frame Extractor](https://github.com/morishuz/adaptive-frame-extractor), a more mature cross-platform GUI app with additional features and no Python setup required. Future development is focused on the new app.**
+
 The extractor uses dense OpenCV DIS optical flow to select SfM-friendly keyframes.
 
 The extractor tracks a regular grid of points through adjacent-frame dense flow, scores cumulative displacement from the current keyframe, and triggers a new keyframe when motion or point loss crosses configured thresholds.
